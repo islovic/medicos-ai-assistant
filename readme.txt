@@ -4,7 +4,7 @@ Tags: chat, ai, medical, appointment, booking, clinic
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,9 @@ Yes. You can change the assistant name, primary color, widget position, language
 Serbian and English. The assistant language can be set in the plugin settings.
 
 == Changelog ==
+
+= 1.0.1 =
+* Fix: chat window no longer flickers while the AI response streams in — streamed tokens now update only the message bubble instead of rebuilding the whole widget
 
 = 1.0.0 =
 * Initial release

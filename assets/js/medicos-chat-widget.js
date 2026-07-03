@@ -239,11 +239,23 @@
 
 			function upsertAssistant(text) {
 				var last = messages[messages.length - 1];
-				if (last && last.role === "assistant" && messages.length > 1 && messages[messages.length - 2].role === "user") {
+				var isStreamingUpdate = last && last.role === "assistant" && messages.length > 1 && messages[messages.length - 2].role === "user";
+				if (isStreamingUpdate) {
 					last.content = text;
+					// Update ONLY the last assistant bubble in place. Calling the full
+					// render() on every streamed token tears down and rebuilds the whole
+					// widget many times per second, which caused visible flickering.
+					var bubbles = document.querySelectorAll("#medicos-chat-messages .medicos-chat-bubble-assistant");
+					var target = bubbles[bubbles.length - 1];
+					if (target) {
+						target.innerHTML = mdToHtml(text);
+						scrollToBottom();
+						return;
+					}
 				} else {
 					messages.push({ role: "assistant", content: text });
 				}
+				// First token (new assistant row) or fallback: full render once.
 				render();
 				scrollToBottom();
 			}
