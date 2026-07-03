@@ -4,7 +4,7 @@ Tags: chat, ai, medical, appointment, booking, clinic
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,10 @@ Yes. You can change the assistant name, primary color, widget position, language
 Serbian and English. The assistant language can be set in the plugin settings.
 
 == Changelog ==
+
+= 1.0.2 =
+* Fix: eliminated the brief flash of the page behind the chat widget at the end of each AI response — the widget now updates its DOM incrementally instead of rebuilding itself (full rebuild only happens when opening/closing the chat)
+* Updater: "Check again" on the WordPress Updates screen now bypasses the 6h cache and re-checks GitHub immediately (normal periodic checks still use the 6h cache)
 
 = 1.0.1 =
 * Fix: chat window no longer flickers while the AI response streams in — streamed tokens now update only the message bubble instead of rebuilding the whole widget

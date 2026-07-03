@@ -30,11 +30,17 @@ class Medicos_Updater {
 
 	/**
 	 * Fetch latest release info from GitHub (cached for 6 hours).
+	 *
+	 * @param bool $force When true, bypass the cache and fetch fresh from GitHub.
+	 *                    Used when the user clicks "Check again" in wp-admin so a
+	 *                    just-published release shows up without waiting out the cache.
 	 */
-	private function get_release_info() {
-		$cached = get_transient( $this->transient_key );
-		if ( false !== $cached ) {
-			return $cached;
+	private function get_release_info( $force = false ) {
+		if ( ! $force ) {
+			$cached = get_transient( $this->transient_key );
+			if ( false !== $cached ) {
+				return $cached;
+			}
 		}
 
 		$url = sprintf( 'https://api.github.com/repos/%s/releases/latest', $this->github_repo );
@@ -85,7 +91,10 @@ class Medicos_Updater {
 			return $transient;
 		}
 
-		$release = $this->get_release_info();
+		// WordPress sets ?force-check=1 when the user clicks "Check again" on the
+		// Updates screen. Honor it by re-fetching from GitHub, bypassing the 6h cache.
+		$force   = ! empty( $_GET['force-check'] );
+		$release = $this->get_release_info( $force );
 		if ( ! $release ) {
 			return $transient;
 		}

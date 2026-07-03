@@ -186,6 +186,67 @@
 		.catch(function () { isSpeaking = false; render(); });
 	}
 
+	/* ── Incremental DOM helpers ──
+	   While the chat is open, mutate the existing DOM instead of calling the
+	   full render() (which does root.innerHTML="" and rebuilds the whole widget).
+	   A full teardown makes the fixed widget vanish for one frame, flashing the
+	   page/links behind it. render() is now used only for open/close. */
+	function buildMessageRow(role, content) {
+		var row = el("div", "medicos-chat-msg medicos-chat-msg-" + role);
+		if (role === "assistant") {
+			var avatar = el("div", "medicos-chat-avatar medicos-chat-avatar-bot");
+			avatar.innerHTML = ICONS.bot;
+			row.appendChild(avatar);
+		}
+		var bubble = el("div", "medicos-chat-bubble-text medicos-chat-bubble-" + role);
+		if (role === "assistant") { bubble.innerHTML = mdToHtml(content); }
+		else { bubble.textContent = content; }
+		row.appendChild(bubble);
+		if (role === "user") {
+			var uAvatar = el("div", "medicos-chat-avatar medicos-chat-avatar-user");
+			uAvatar.innerHTML = ICONS.user;
+			row.appendChild(uAvatar);
+		}
+		return row;
+	}
+
+	function appendMessageRow(role, content) {
+		var area = document.getElementById("medicos-chat-messages");
+		if (!area) return null;
+		var row = buildMessageRow(role, content);
+		area.appendChild(row);
+		scrollToBottom();
+		return row.querySelector(".medicos-chat-bubble-text");
+	}
+
+	function showLoadingRow() {
+		var area = document.getElementById("medicos-chat-messages");
+		if (!area || document.getElementById("medicos-chat-loading-row")) return;
+		var loadRow = el("div", "medicos-chat-msg medicos-chat-msg-assistant", { id: "medicos-chat-loading-row" });
+		var loadAvatar = el("div", "medicos-chat-avatar medicos-chat-avatar-bot");
+		loadAvatar.innerHTML = ICONS.bot;
+		loadRow.appendChild(loadAvatar);
+		var loadBubble = el("div", "medicos-chat-bubble-text medicos-chat-bubble-assistant");
+		loadBubble.innerHTML = '<span class="medicos-chat-loading"><span></span><span></span><span></span></span>';
+		loadRow.appendChild(loadBubble);
+		area.appendChild(loadRow);
+		scrollToBottom();
+	}
+
+	function removeLoadingRow() {
+		var r = document.getElementById("medicos-chat-loading-row");
+		if (r && r.parentNode) r.parentNode.removeChild(r);
+	}
+
+	function setInputEnabled(enabled) {
+		var ta = document.getElementById("medicos-chat-input");
+		if (ta) ta.disabled = !enabled;
+		var sendBtn = document.querySelector(".medicos-chat-input-area .medicos-chat-btn-send");
+		if (sendBtn) sendBtn.disabled = !enabled;
+		var micBtn = document.querySelector(".medicos-chat-input-area .medicos-chat-btn:not(.medicos-chat-btn-send)");
+		if (micBtn) micBtn.disabled = !enabled;
+	}
+
 	/* ── Send message ── */
 	function send() {
 		var textarea = document.getElementById("medicos-chat-input");
@@ -197,13 +258,18 @@
 		messages.push({ role: "user", content: text });
 		if (textarea) { textarea.value = ""; autoResize(textarea); }
 		isLoading = true;
-		render();
+		// Incremental: append the user row + loading indicator, disable input.
+		// No full render() → no teardown flash.
+		appendMessageRow("user", text);
+		showLoadingRow();
+		setInputEnabled(false);
 
 		var bodyMessages = messages.map(function (m) {
 			return { role: m.role, content: m.content };
 		});
 
 		var assistantSoFar = "";
+		var streamBubble = null;
 
 		fetch(PROXY_URL, {
 			method: "POST",
@@ -238,26 +304,18 @@
 			}
 
 			function upsertAssistant(text) {
-				var last = messages[messages.length - 1];
-				var isStreamingUpdate = last && last.role === "assistant" && messages.length > 1 && messages[messages.length - 2].role === "user";
-				if (isStreamingUpdate) {
-					last.content = text;
-					// Update ONLY the last assistant bubble in place. Calling the full
-					// render() on every streamed token tears down and rebuilds the whole
-					// widget many times per second, which caused visible flickering.
-					var bubbles = document.querySelectorAll("#medicos-chat-messages .medicos-chat-bubble-assistant");
-					var target = bubbles[bubbles.length - 1];
-					if (target) {
-						target.innerHTML = mdToHtml(text);
-						scrollToBottom();
-						return;
-					}
-				} else {
+				if (!streamBubble) {
+					// First token: replace the loading indicator with a real
+					// assistant bubble and keep a reference to it.
 					messages.push({ role: "assistant", content: text });
+					removeLoadingRow();
+					streamBubble = appendMessageRow("assistant", text);
+				} else {
+					// Subsequent tokens: update only that bubble in place.
+					messages[messages.length - 1].content = text;
+					streamBubble.innerHTML = mdToHtml(text);
+					scrollToBottom();
 				}
-				// First token (new assistant row) or fallback: full render once.
-				render();
-				scrollToBottom();
 			}
 
 			function pump() {
@@ -290,20 +348,22 @@
 		})
 		.then(function () {
 			isLoading = false;
-			render();
+			// Incremental: just re-enable input. No teardown → no end-of-message flash.
+			removeLoadingRow();
+			setInputEnabled(true);
 			if (TTS_ENABLED && assistantSoFar) playTTS(assistantSoFar);
 		})
 		.catch(function (err) {
 			console.error("Medicos chat error:", err);
 			isLoading = false;
-			messages.push({
-				role: "assistant",
-				content: t(
-					"Izvinite, došlo je do greške u komunikaciji. Pokušajte ponovo.",
-					"Sorry, a communication error occurred. Please try again."
-				),
-			});
-			render();
+			var errText = t(
+				"Izvinite, došlo je do greške u komunikaciji. Pokušajte ponovo.",
+				"Sorry, a communication error occurred. Please try again."
+			);
+			messages.push({ role: "assistant", content: errText });
+			removeLoadingRow();
+			appendMessageRow("assistant", errText);
+			setInputEnabled(true);
 		});
 	}
 
