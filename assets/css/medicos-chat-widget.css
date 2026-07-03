@@ -351,9 +351,12 @@
 	.medicos-chat-window {
 		width: 100vw;
 		max-width: 100vw;
-		height: 100vh;
+		height: 100vh;        /* fallback for very old browsers */
+		height: 100dvh;       /* dynamic vh — excludes browser chrome */
 		max-height: 100vh;
-		bottom: 0;
+		max-height: 100dvh;
+		top: 0;               /* pin header to the true top (JS overrides via VisualViewport) */
+		bottom: auto;
 		right: 0;
 		left: 0;
 		border-radius: 0;

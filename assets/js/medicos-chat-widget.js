@@ -380,6 +380,34 @@
 		if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
 	}
 
+	/* ── Mobile viewport sync (keyboard-aware) ──
+	   On phones the on-screen keyboard doesn't shrink 100vh/100dvh, so a fixed
+	   full-height window has its header pushed above the visible area and the
+	   greeting disappears. Pin the window to window.visualViewport — the region
+	   that stays visible above the keyboard — so the header sits at the real top
+	   and the input rests just above the keyboard. */
+	function isMobile() { return window.innerWidth <= 480; }
+
+	function syncMobileViewport() {
+		var win = document.querySelector(".medicos-chat-window");
+		if (!win) return;
+		var vv = window.visualViewport;
+		if (isMobile() && vv) {
+			win.style.position = "fixed";
+			win.style.top    = vv.offsetTop + "px";
+			win.style.left   = vv.offsetLeft + "px";
+			win.style.right  = "auto";
+			win.style.bottom = "auto";
+			win.style.width  = vv.width + "px";
+			win.style.height = vv.height + "px";
+		} else {
+			// Desktop — clear inline overrides so the stylesheet governs layout.
+			win.style.position = win.style.top = win.style.left =
+				win.style.right = win.style.bottom = win.style.width = win.style.height = "";
+		}
+		scrollToBottom();
+	}
+
 	/* ── Open / Close ── */
 	function openChat() {
 		isOpen = true;
@@ -394,8 +422,13 @@
 		}
 		render();
 		setTimeout(function () {
-			var input = document.getElementById("medicos-chat-input");
-			if (input) input.focus();
+			// Don't auto-focus on mobile: it pops the keyboard immediately and
+			// hides the greeting. Let the user tap the field when ready to type.
+			if (!isMobile()) {
+				var input = document.getElementById("medicos-chat-input");
+				if (input) input.focus();
+			}
+			syncMobileViewport();
 			scrollToBottom();
 		}, 50);
 	}
@@ -560,6 +593,7 @@
 		win.appendChild(inputArea);
 		root.appendChild(win);
 
+		syncMobileViewport();
 		scrollToBottom();
 	}
 
@@ -571,6 +605,17 @@
 		document.head.appendChild(style);
 
 		render();
+
+		// Keep the open window aligned to the visible area as the keyboard
+		// shows/hides or the viewport is scrolled/zoomed.
+		if (window.visualViewport) {
+			var onVV = function () { if (isOpen) syncMobileViewport(); };
+			window.visualViewport.addEventListener("resize", onVV);
+			window.visualViewport.addEventListener("scroll", onVV);
+		}
+		window.addEventListener("orientationchange", function () {
+			if (isOpen) setTimeout(syncMobileViewport, 150);
+		});
 
 		if (AUTO_DELAY > 0) {
 			setTimeout(openChat, AUTO_DELAY * 1000);
