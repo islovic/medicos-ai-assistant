@@ -3,7 +3,7 @@
  * Plugin Name: Medicos AI Assistant
  * Plugin URI:  https://medicos.health
  * Description: AI chat assistant for clinics — connects your WordPress site to the Medicos SaaS platform for patient triage, appointment booking, and clinic information.
- * Version:     1.0.4
+ * Version:     1.0.5
  * Author:      Medicos
  * Author URI:  https://medicos.health
  * License:     GPL-2.0-or-later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MEDICOS_AI_VERSION', '1.0.4' );
+define( 'MEDICOS_AI_VERSION', '1.0.5' );
 define( 'MEDICOS_AI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MEDICOS_AI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
