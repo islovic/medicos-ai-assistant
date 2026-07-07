@@ -393,17 +393,18 @@
 		if (!win) return;
 		var vv = window.visualViewport;
 		if (isMobile() && vv) {
+			// The keyboard only changes the VERTICAL space, so adjust top/height
+			// only. Leave width/left to the stylesheet (100vw) — overriding them
+			// from visualViewport could push the header's close (X) button off the
+			// right edge of the screen on devices where vv.width/offsetLeft differ
+			// from the layout viewport.
 			win.style.position = "fixed";
 			win.style.top    = vv.offsetTop + "px";
-			win.style.left   = vv.offsetLeft + "px";
-			win.style.right  = "auto";
 			win.style.bottom = "auto";
-			win.style.width  = vv.width + "px";
 			win.style.height = vv.height + "px";
 		} else {
 			// Desktop — clear inline overrides so the stylesheet governs layout.
-			win.style.position = win.style.top = win.style.left =
-				win.style.right = win.style.bottom = win.style.width = win.style.height = "";
+			win.style.position = win.style.top = win.style.bottom = win.style.height = "";
 		}
 		scrollToBottom();
 	}

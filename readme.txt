@@ -4,7 +4,7 @@ Tags: chat, ai, medical, appointment, booking, clinic
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,9 @@ Yes. You can change the assistant name, primary color, widget position, language
 Serbian and English. The assistant language can be set in the plugin settings.
 
 == Changelog ==
+
+= 1.0.4 =
+* Fix: the close (X) button could be pushed off the right edge of the screen on some phones. The mobile viewport sync now adjusts only vertical position/height (for the keyboard) and leaves width full-screen, so the header and its close button are always fully visible.
 
 = 1.0.3 =
 * Mobile: fixed the chat window so the header and greeting stay visible when the on-screen keyboard opens — the window now tracks the visible viewport (VisualViewport API) instead of a fixed 100vh that the keyboard pushed off-screen
