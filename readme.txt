@@ -4,7 +4,7 @@ Tags: chat, ai, medical, appointment, booking, clinic
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,12 @@ Yes. You can change the assistant name, primary color, widget position, language
 Serbian and English. The assistant language can be set in the plugin settings.
 
 == Changelog ==
+
+= 1.0.6 =
+* Rewrote the markdown renderer as a proper line-based parser: numbered lists keep continuous numbering even when the AI separates items with blank lines (was: 1, then 1, 2), bullets that are really numbered items ("- 1. Foo") render as real numbered lists, and greedy list matching can no longer swallow following paragraphs into a list item
+* Network errors: if a message fails to send (e.g. mobile connection drop), it is placed back into the input field for one-tap retry instead of being lost, with a clear "check your connection" notice
+* Conversation history now survives page reloads and navigation within the site (per-tab sessionStorage)
+* The chat now sends the configured assistant name to the Medicos backend so the AI introduces itself with the same name shown in the widget
 
 = 1.0.5 =
 * Fix: the close (X) icon rendered at zero width (collapsed as a flex item) and was invisible. It now has a fixed size and a subtle circular button background, so the close control is clearly visible and tappable — including on touch devices with no hover state.

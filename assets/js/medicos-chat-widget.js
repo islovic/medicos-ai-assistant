@@ -27,6 +27,29 @@
 	/* ── State ── */
 	var messages    = [];
 	var isOpen      = false;
+
+	/* ── Conversation persistence (per tab) ──
+	   Keep the chat history in sessionStorage so a page reload or navigation
+	   within the site doesn't wipe the conversation mid-triage. */
+	var STORE_KEY = "medicos_chat_" + CLINIC_ID;
+
+	function saveState() {
+		try {
+			sessionStorage.setItem(STORE_KEY, JSON.stringify({ m: messages.slice(-50), o: isOpen }));
+		} catch (e) { /* private mode / quota — ignore */ }
+	}
+
+	function loadState() {
+		try {
+			var raw = sessionStorage.getItem(STORE_KEY);
+			if (!raw) return;
+			var s = JSON.parse(raw);
+			if (s && Array.isArray(s.m) && s.m.length) {
+				messages = s.m;
+				isOpen   = !!s.o;
+			}
+		} catch (e) { /* corrupted — start fresh */ }
+	}
 	var isLoading   = false;
 	var isSpeaking  = false;
 	var ttsMuted    = false;
@@ -57,42 +80,75 @@
 		volX: '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>',
 	};
 
-	/* ── Lightweight Markdown ── */
+	/* ── Lightweight Markdown ──
+	   Line-based block pass. The previous implementation converted newlines to
+	   <br>/</p><p> markers first and then matched lists with greedy regexes —
+	   those could span paragraph boundaries and swallow the rest of the message
+	   into a single <li> (seen live as broken/renumbered lists). Processing
+	   line-by-line makes that impossible and keeps numbering continuous even
+	   when the model separates items with blank lines. */
 	function mdToHtml(md) {
 		if (!md) return "";
-		var html = md
-			// Escape HTML
+		// Escape + inline styles
+		var esc = md
 			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-			// Bold
 			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-			// Italic
 			.replace(/\*(.+?)\*/g, "<em>$1</em>")
 			.replace(/_(.+?)_/g, "<em>$1</em>")
-			// Inline code
 			.replace(/`(.+?)`/g, "<code>$1</code>")
-			// Links
-			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-			// Line breaks → paragraphs
-			.replace(/\n{2,}/g, "</p><p>")
-			.replace(/\n/g, "<br>");
+			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-		// Unordered lists
-		html = html.replace(/((?:^|\<br\>)[\s]*[-*]\s.+(?:\<br\>[\s]*[-*]\s.+)*)/g, function (match) {
-			var items = match.split(/<br>/g).map(function (line) {
-				return line.replace(/^\s*[-*]\s/, "");
-			}).filter(Boolean);
-			return "<ul>" + items.map(function (li) { return "<li>" + li + "</li>"; }).join("") + "</ul>";
+		var out  = [];
+		var para = [];   // lines of the paragraph being built
+		var list = null; // { type: "ol"|"ul", start: n, items: [] }
+
+		function flushPara() {
+			if (para.length) { out.push("<p>" + para.join("<br>") + "</p>"); para = []; }
+		}
+		function flushList() {
+			if (list) {
+				var attr = (list.type === "ol" && list.start > 1) ? ' start="' + list.start + '"' : "";
+				out.push("<" + list.type + attr + ">" + list.items.map(function (i) { return "<li>" + i + "</li>"; }).join("") + "</" + list.type + ">");
+				list = null;
+			}
+		}
+
+		var olRe = /^\s*(\d+)[.)]\s+(.*)$/;
+		var ulRe = /^\s*[-*]\s+(.*)$/;
+		// "- 1. Foo" (or "- <strong>1. Foo</strong>") — a bullet that is really
+		// a numbered item; render as <ol> so the user doesn't see "• 1. Foo".
+		var bulletNum = /^((?:<(?:strong|em)>)*)\s*(\d+)[.)]\s*/;
+
+		esc.split("\n").forEach(function (line) {
+			var m;
+			if ((m = line.match(olRe))) {
+				flushPara();
+				if (!list || list.type !== "ol") { flushList(); list = { type: "ol", start: parseInt(m[1], 10) || 1, items: [] }; }
+				list.items.push(m[2]);
+			} else if ((m = line.match(ulRe))) {
+				flushPara();
+				var item = m[1];
+				var nm = item.match(bulletNum);
+				if (nm) {
+					if (!list || list.type !== "ol") { flushList(); list = { type: "ol", start: parseInt(nm[2], 10) || 1, items: [] }; }
+					list.items.push(item.replace(bulletNum, "$1"));
+				} else {
+					if (!list || list.type !== "ul") { flushList(); list = { type: "ul", start: 1, items: [] }; }
+					list.items.push(item);
+				}
+			} else if (line.trim() === "") {
+				// Blank line ends a paragraph but NOT a list — models often put
+				// blank lines between numbered items; keeping the list open is
+				// what preserves continuous numbering (1,2,3 not 1 / 1,2).
+				flushPara();
+			} else {
+				flushList();
+				para.push(line);
+			}
 		});
-
-		// Ordered lists
-		html = html.replace(/((?:^|\<br\>)[\s]*\d+\.\s.+(?:\<br\>[\s]*\d+\.\s.+)*)/g, function (match) {
-			var items = match.split(/<br>/g).map(function (line) {
-				return line.replace(/^\s*\d+\.\s/, "");
-			}).filter(Boolean);
-			return "<ol>" + items.map(function (li) { return "<li>" + li + "</li>"; }).join("") + "</ol>";
-		});
-
-		return "<p>" + html + "</p>";
+		flushPara();
+		flushList();
+		return out.join("");
 	}
 
 	/* ── Speech-to-Text (Web Speech API) ── */
@@ -280,6 +336,7 @@
 				messages: bodyMessages,
 				clinicName: CLINIC_NAME,
 				clinicId: CLINIC_ID,
+				assistantName: ASSISTANT,
 				userLocalTime: new Date().toISOString(),
 			}),
 		})
@@ -351,19 +408,44 @@
 			// Incremental: just re-enable input. No teardown → no end-of-message flash.
 			removeLoadingRow();
 			setInputEnabled(true);
+			saveState();
 			if (TTS_ENABLED && assistantSoFar) playTTS(assistantSoFar);
 		})
 		.catch(function (err) {
 			console.error("Medicos chat error:", err);
 			isLoading = false;
-			var errText = t(
-				"Izvinite, došlo je do greške u komunikaciji. Pokušajte ponovo.",
-				"Sorry, a communication error occurred. Please try again."
-			);
-			messages.push({ role: "assistant", content: errText });
 			removeLoadingRow();
+
+			var errText;
+			if (!assistantSoFar) {
+				// Nothing came back — the request likely never reached the server
+				// (e.g. mobile network drop). Put the message back into the input
+				// so one tap on send retries it, and drop it from history so a
+				// retry doesn't duplicate the user turn.
+				var last = messages[messages.length - 1];
+				if (last && last.role === "user") {
+					messages.pop();
+					var userRows = document.querySelectorAll("#medicos-chat-messages .medicos-chat-msg-user");
+					var lastRow = userRows[userRows.length - 1];
+					if (lastRow && lastRow.parentNode) lastRow.parentNode.removeChild(lastRow);
+					var ta = document.getElementById("medicos-chat-input");
+					if (ta) { ta.value = last.content; autoResize(ta); }
+				}
+				errText = t(
+					"Poruka nije poslata — proverite internet vezu i pošaljite ponovo.",
+					"Message not sent — check your connection and send again."
+				);
+			} else {
+				// Partial reply already rendered — keep it, just note the break.
+				errText = t(
+					"Izvinite, došlo je do greške u komunikaciji. Pokušajte ponovo.",
+					"Sorry, a communication error occurred. Please try again."
+				);
+			}
+			messages.push({ role: "assistant", content: errText });
 			appendMessageRow("assistant", errText);
 			setInputEnabled(true);
+			saveState();
 		});
 	}
 
@@ -421,6 +503,7 @@
 				),
 			});
 		}
+		saveState();
 		render();
 		setTimeout(function () {
 			// Don't auto-focus on mobile: it pops the keyboard immediately and
@@ -438,6 +521,7 @@
 		isOpen = false;
 		if (sttActive) stopSTT();
 		if (currentAudio) { currentAudio.pause(); currentAudio = null; isSpeaking = false; }
+		saveState();
 		render();
 	}
 
@@ -605,6 +689,8 @@
 		style.textContent = ".medicos-chat-avatar-bot { color: " + COLOR + "; background: " + COLOR + "1a; }";
 		document.head.appendChild(style);
 
+		// Restore conversation from this tab's earlier page views, then render.
+		loadState();
 		render();
 
 		// Keep the open window aligned to the visible area as the keyboard
